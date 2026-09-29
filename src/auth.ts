@@ -5,6 +5,8 @@ import type { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { credentialsSchema } from "@/lib/validation";
 
+const DUMMY_PASSWORD_HASH = "$2b$12$bfuiuNl1nQ4k2Tfdm4MHCuw0T2bBcy6h.SGnDePjFiedExbaHG6ji";
+
 function isRole(value: unknown): value is Role {
   return value === "ADMIN" || value === "OPERADOR" || value === "PARCEIRO";
 }
@@ -26,7 +28,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           where: { email: parsed.data.email.toLowerCase() },
         });
 
-        if (!user?.isActive || !(await bcrypt.compare(parsed.data.password, user.passwordHash))) {
+        const passwordHash = user?.passwordHash ?? DUMMY_PASSWORD_HASH;
+        const passwordMatches = await bcrypt.compare(parsed.data.password, passwordHash);
+
+        if (!user?.isActive || !passwordMatches) {
           return null;
         }
 

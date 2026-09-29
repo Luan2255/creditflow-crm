@@ -13,9 +13,9 @@ async function main() {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const users = [
-    { name: "Alex Morgan", email: "admin@creditflow.local", role: Role.ADMIN },
-    { name: "Jordan Lee", email: "operator@creditflow.local", role: Role.OPERADOR },
-    { name: "Taylor Reed", email: "partner@creditflow.local", role: Role.PARCEIRO },
+    { name: "Ana Martins", email: "admin@creditflow.local", role: Role.ADMIN },
+    { name: "Bruno Almeida", email: "operator@creditflow.local", role: Role.OPERADOR },
+    { name: "Camila Souza", email: "partner@creditflow.local", role: Role.PARCEIRO },
   ];
 
   for (const user of users) {
