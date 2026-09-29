@@ -26,3 +26,8 @@ export const pricingRuleSchema = z.object({
   monthlyRate: z.coerce.number().min(0).max(100),
   isActive: z.enum(["true", "false"]).transform((value) => value === "true").default("true"),
 });
+
+export const partnerCommissionSchema = z.object({
+  partnerId: z.string().uuid(),
+  commissionPercent: z.coerce.number().min(0).max(100),
+});

@@ -25,3 +25,20 @@ export async function savePricingRule(actor: Actor, input: {
     },
   });
 }
+
+export async function listPartnerCommissions() {
+  return prisma.user.findMany({
+    where: { role: Role.PARCEIRO, isActive: true },
+    select: { id: true, name: true, commissionPercent: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+export async function savePartnerCommission(actor: Actor, partnerId: string, commissionPercent: number) {
+  if (actor.role !== Role.ADMIN) throw new Error("Somente ADMIN pode alterar comissões.");
+  const result = await prisma.user.updateMany({
+    where: { id: partnerId, role: Role.PARCEIRO },
+    data: { commissionPercent: commissionPercent.toFixed(2) },
+  });
+  if (result.count !== 1) throw new Error("Parceiro não encontrado.");
+}
