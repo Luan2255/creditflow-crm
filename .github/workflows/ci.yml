@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: creditflow
+          POSTGRES_USER: creditflow
+          POSTGRES_PASSWORD: creditflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U creditflow -d creditflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://creditflow:creditflow@localhost:5432/creditflow?schema=public
+      AUTH_TRUST_HOST: "true"
+      SEED_USER_PASSWORD: e2e-${{ github.run_id }}-${{ github.run_attempt }}-local-test
+      E2E_USER_PASSWORD: e2e-${{ github.run_id }}-${{ github.run_attempt }}-local-test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate test-only Auth.js secret
+        run: echo "AUTH_SECRET=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+      - name: Generate Prisma Client
+        run: npm run db:generate
+      - name: Lint
+        run: npm run lint
+      - name: Type-check
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+      - name: Apply database migrations
+        run: npm run db:deploy
+      - name: Seed synthetic test data
+        run: npm run db:seed
+      - name: End-to-end tests
+        run: npm run test:e2e

@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { requireRole } from "@/lib/authorization";
 import { canTransitionProposal, formatCpf, PROPOSAL_STATUSES, type ProposalStage } from "@/lib/domain";
 import { listClientsForProposal } from "@/lib/services/clients";
-import { listPricingRules } from "@/lib/services/pricing";
+import { listPricingRules, listProducts } from "@/lib/services/pricing";
 import { listProposals } from "@/lib/services/proposals";
 import { changeProposalStatusAction, createProposalAction } from "@/app/actions";
 
@@ -21,10 +21,11 @@ const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "
 
 export default async function ProposalsPage() {
   const { user } = await requireRole(Role.ADMIN, Role.OPERADOR, Role.PARCEIRO);
-  const [proposals, clients, pricingRules] = await Promise.all([
+  const [proposals, clients, pricingRules, products] = await Promise.all([
     listProposals(user),
     listClientsForProposal(user),
     listPricingRules(true),
+    listProducts(true),
   ]);
 
   return (
@@ -39,8 +40,8 @@ export default async function ProposalsPage() {
 
       <section className="mt-6 border-b border-neutral-200 pb-7">
         <h2 className="font-serif text-xl text-neutral-900">Nova proposta</h2>
-        {clients.length && pricingRules.length ? (
-          <form action={createProposalAction} className="mt-4 grid gap-3 sm:grid-cols-[minmax(200px,1.3fr)_minmax(150px,1fr)_minmax(120px,0.6fr)_auto] sm:items-end">
+        {clients.length && pricingRules.length && products.length ? (
+          <form action={createProposalAction} className="mt-4 grid gap-3 sm:grid-cols-[minmax(180px,1.2fr)_minmax(150px,1fr)_minmax(140px,0.8fr)_minmax(120px,0.6fr)_auto] sm:items-end">
             <label className="space-y-1 text-xs text-neutral-600">
               Cliente
               <select id="proposal-client" name="clientId" required className="h-11 w-full border border-neutral-300 bg-white px-3 text-sm text-neutral-900">
@@ -52,6 +53,12 @@ export default async function ProposalsPage() {
               <Input name="amount" type="number" min="1" step="0.01" placeholder="R$ 8.500,00" required />
             </label>
             <label className="space-y-1 text-xs text-neutral-600">
+              Produto
+              <select name="productId" required className="h-11 w-full border border-neutral-300 bg-white px-3 text-sm text-neutral-900">
+                {products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1 text-xs text-neutral-600">
               Prazo
               <select name="termMonths" required className="h-11 w-full border border-neutral-300 bg-white px-3 text-sm text-neutral-900">
                 {pricingRules.map((rule) => <option key={rule.id} value={rule.termMonths}>{rule.termMonths} meses · {rule.monthlyRate.toString()}% a.m.</option>)}
@@ -61,7 +68,11 @@ export default async function ProposalsPage() {
           </form>
         ) : (
           <p className="mt-3 text-sm text-neutral-600">
-            {clients.length ? "Cadastre uma taxa ativa no simulador para criar propostas." : "Cadastre um cliente para iniciar uma proposta."}
+            {!clients.length
+              ? "Cadastre um cliente para iniciar uma proposta."
+              : !products.length
+                ? "Nenhum produto ativo está configurado."
+                : "Cadastre uma taxa ativa no simulador para criar propostas."}
           </p>
         )}
       </section>
@@ -88,7 +99,7 @@ export default async function ProposalsPage() {
                         <p className="shrink-0 text-sm font-semibold tabular-nums text-emerald-950">{currency.format(proposal.amount.toNumber())}</p>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-500">
-                        <span>{proposal.termMonths} meses · {proposal.monthlyRate.toString()}% a.m.</span>
+                        <span>{proposal.product.name} · {proposal.termMonths} meses · {proposal.monthlyRate.toString()}% a.m.</span>
                         {user.role !== Role.PARCEIRO && <span>{proposal.partner.name}</span>}
                       </div>
                       {proposal.status === ProposalStatus.PAGA && proposal.commissionAmount && (

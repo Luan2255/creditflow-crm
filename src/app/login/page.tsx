@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { ArrowRight, Landmark, LockKeyhole } from "lucide-react";
 import { loginAction } from "@/app/actions";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,9 @@ import { Input } from "@/components/ui/input";
 
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(loginAction, {});
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => setHydrated(true), []);
 
   return (
     <main className="grid min-h-screen lg:grid-cols-[minmax(350px,0.85fr)_1.15fr]">
@@ -38,7 +41,7 @@ export default function LoginPage() {
           <h2 className="font-serif text-3xl text-neutral-900">Boas-vindas</h2>
           <p className="mt-2 text-sm text-neutral-600">Entre com suas credenciais para continuar.</p>
 
-          <form action={formAction} className="mt-8 space-y-5">
+          <form action={formAction} data-testid="login-form" data-hydrated={hydrated} className="mt-8 space-y-5">
             <div className="space-y-2">
               <label htmlFor="email" className="text-sm font-medium text-neutral-800">E-mail</label>
               <Input id="email" name="email" type="email" autoComplete="email" placeholder="voce@empresa.com" required />

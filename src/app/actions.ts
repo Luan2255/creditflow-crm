@@ -1,15 +1,22 @@
 "use server";
 
-import { ProposalStatus, Role } from "@prisma/client";
 import { AuthError } from "next-auth";
 import { revalidatePath } from "next/cache";
+import { ProposalStatus, Role } from "@prisma/client";
 import { signIn, signOut } from "@/auth";
 import { requireRole } from "@/lib/authorization";
-import { PROPOSAL_STATUSES } from "@/lib/domain";
-import { removeClient, saveClient } from "@/lib/services/clients";
+import { saveClient, removeClient } from "@/lib/services/clients";
 import { changeProposalStatus, createProposal } from "@/lib/services/proposals";
 import { savePartnerCommission, savePricingRule } from "@/lib/services/pricing";
-import { clientSchema, credentialsSchema, partnerCommissionSchema, pricingRuleSchema, proposalSchema } from "@/lib/validation";
+import {
+  clientSchema,
+  credentialsSchema,
+  partnerCommissionSchema,
+  pricingRuleSchema,
+  proposalSchema,
+  proposalStatusSchema,
+  recordIdSchema,
+} from "@/lib/validation";
 
 export type LoginState = { error?: string };
 
@@ -35,77 +42,96 @@ export async function logoutAction() {
   await signOut({ redirectTo: "/login" });
 }
 
-const operationalRoles = [Role.ADMIN, Role.OPERADOR, Role.PARCEIRO] as const;
+function readFormValue(formData: FormData, key: string): string | undefined {
+  const value = formData.get(key);
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function throwValidationError(error: { issues: { message: string }[] }): never {
+  throw new Error(error.issues[0]?.message ?? "Confira os dados informados.");
+}
+
+async function currentActor() {
+  const { user } = await requireRole(Role.ADMIN, Role.OPERADOR, Role.PARCEIRO);
+  return { id: user.id, role: user.role };
+}
 
 export async function saveClientAction(formData: FormData) {
-  const { user } = await requireRole(...operationalRoles);
   const parsed = clientSchema.safeParse({
-    id: formData.get("id") || undefined,
-    name: formData.get("name"),
-    cpf: formData.get("cpf") || undefined,
-    phone: formData.get("phone") || undefined,
-    email: formData.get("email") || undefined,
-    partnerId: formData.get("partnerId") || undefined,
+    id: readFormValue(formData, "id"),
+    name: readFormValue(formData, "name"),
+    cpf: readFormValue(formData, "cpf"),
+    phone: readFormValue(formData, "phone"),
+    email: readFormValue(formData, "email"),
+    partnerId: readFormValue(formData, "partnerId"),
   });
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Dados de cliente inválidos.");
-  await saveClient(user, parsed.data);
+  if (!parsed.success) throwValidationError(parsed.error);
+
+  await saveClient(await currentActor(), parsed.data);
   revalidatePath("/dashboard/clients");
+  revalidatePath("/dashboard/proposals");
 }
 
 export async function deleteClientAction(formData: FormData) {
-  const { user } = await requireRole(...operationalRoles);
-  const id = String(formData.get("id") ?? "");
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("Cliente inválido.");
-  await removeClient(user, id);
+  const parsed = recordIdSchema.safeParse({ id: readFormValue(formData, "id") });
+  if (!parsed.success) throwValidationError(parsed.error);
+
+  await removeClient(await currentActor(), parsed.data.id);
   revalidatePath("/dashboard/clients");
 }
 
 export async function createProposalAction(formData: FormData) {
-  const { user } = await requireRole(...operationalRoles);
   const parsed = proposalSchema.safeParse({
-    clientId: formData.get("clientId"),
-    amount: formData.get("amount"),
-    termMonths: formData.get("termMonths"),
+    clientId: readFormValue(formData, "clientId"),
+    productId: readFormValue(formData, "productId"),
+    amount: readFormValue(formData, "amount"),
+    termMonths: readFormValue(formData, "termMonths"),
   });
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Dados da proposta inválidos.");
-  await createProposal(user, parsed.data);
+  if (!parsed.success) throwValidationError(parsed.error);
+
+  await createProposal(await currentActor(), parsed.data);
   revalidatePath("/dashboard/proposals");
   revalidatePath("/dashboard");
 }
 
 export async function changeProposalStatusAction(formData: FormData) {
-  const { user } = await requireRole(...operationalRoles);
-  const id = String(formData.get("id") ?? "");
-  const status = String(formData.get("status") ?? "");
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error("Proposta inválida.");
-  if (!PROPOSAL_STATUSES.includes(status as (typeof PROPOSAL_STATUSES)[number])) {
-    throw new Error("Status inválido.");
-  }
-  await changeProposalStatus(user, id, status as ProposalStatus);
+  const parsed = proposalStatusSchema.safeParse({
+    id: readFormValue(formData, "id"),
+    status: readFormValue(formData, "status"),
+  });
+  if (!parsed.success) throwValidationError(parsed.error);
+
+  await changeProposalStatus(await currentActor(), parsed.data.id, parsed.data.status as ProposalStatus);
   revalidatePath("/dashboard/proposals");
   revalidatePath("/dashboard");
 }
 
 export async function savePricingRuleAction(formData: FormData) {
-  const { user } = await requireRole(Role.ADMIN);
   const parsed = pricingRuleSchema.safeParse({
-    termMonths: formData.get("termMonths"),
-    monthlyRate: formData.get("monthlyRate"),
-    isActive: formData.get("isActive") ?? "true",
+    termMonths: readFormValue(formData, "termMonths"),
+    monthlyRate: readFormValue(formData, "monthlyRate"),
+    isActive: readFormValue(formData, "isActive") ?? "true",
   });
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Regra de taxa inválida.");
-  await savePricingRule(user, parsed.data);
+  if (!parsed.success) throwValidationError(parsed.error);
+
+  await savePricingRule(await currentActor(), parsed.data);
   revalidatePath("/dashboard/simulator");
   revalidatePath("/dashboard/proposals");
 }
 
 export async function savePartnerCommissionAction(formData: FormData) {
-  const { user } = await requireRole(Role.ADMIN);
   const parsed = partnerCommissionSchema.safeParse({
-    partnerId: formData.get("partnerId"),
-    commissionPercent: formData.get("commissionPercent"),
+    partnerId: readFormValue(formData, "partnerId"),
+    productId: readFormValue(formData, "productId"),
+    commissionPercent: readFormValue(formData, "commissionPercent"),
   });
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Comissão inválida.");
-  await savePartnerCommission(user, parsed.data.partnerId, parsed.data.commissionPercent);
+  if (!parsed.success) throwValidationError(parsed.error);
+
+  await savePartnerCommission(
+    await currentActor(),
+    parsed.data.partnerId,
+    parsed.data.productId,
+    parsed.data.commissionPercent,
+  );
   revalidatePath("/dashboard/simulator");
 }

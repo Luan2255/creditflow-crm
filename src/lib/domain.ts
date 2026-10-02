@@ -36,7 +36,7 @@ export function isValidCpf(value: string): boolean {
 export function formatCpf(value: string, reveal: boolean): string {
   const digits = normalizeCpf(value);
   if (!/^\d{11}$/.test(digits)) return "CPF inválido";
-  if (!reveal) return `***.***.***-${digits.slice(-2)}`;
+  if (!reveal) return `***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**`;
   return digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
 }
 

@@ -3,14 +3,13 @@ import { PROPOSAL_STATUSES } from "@/lib/domain";
 import type { Actor } from "@/lib/services/clients";
 import { prisma } from "@/lib/prisma";
 
-export async function getDashboardMetrics(actor: Actor, now = new Date()) {
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+export async function getDashboardMetrics(actor: Actor, period: { from: Date; to: Date }) {
   const partnerFilter = actor.role === Role.PARCEIRO ? { partnerId: actor.id } : {};
+  const dateFilter = { gte: period.from, lt: period.to };
 
   const [paidThisMonth, monthlyProposals, currentPipeline] = await Promise.all([
     prisma.proposal.findMany({
-      where: { ...partnerFilter, status: ProposalStatus.PAGA, paidAt: { gte: monthStart, lt: nextMonth } },
+      where: { ...partnerFilter, status: ProposalStatus.PAGA, paidAt: dateFilter },
       select: {
         amount: true,
         commissionAmount: true,
@@ -19,12 +18,12 @@ export async function getDashboardMetrics(actor: Actor, now = new Date()) {
       },
     }),
     prisma.proposal.findMany({
-      where: { ...partnerFilter, createdAt: { gte: monthStart, lt: nextMonth } },
+      where: { ...partnerFilter, createdAt: dateFilter },
       select: { id: true, statusHistory: { select: { toStatus: true } } },
     }),
     prisma.proposal.groupBy({
       by: ["status"],
-      where: partnerFilter,
+      where: { ...partnerFilter, createdAt: dateFilter },
       _count: { _all: true },
     }),
   ]);
@@ -64,6 +63,7 @@ export async function getDashboardMetrics(actor: Actor, now = new Date()) {
     production,
     averageTicket: paidThisMonth.length ? production / paidThisMonth.length : 0,
     paidCount: paidThisMonth.length,
+    proposalCount: monthlyProposals.length,
     funnel,
     pipeline: PROPOSAL_STATUSES.map((status) => ({
       status,

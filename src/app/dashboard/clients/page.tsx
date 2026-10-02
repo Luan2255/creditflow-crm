@@ -2,6 +2,7 @@ import { Role } from "@prisma/client";
 import { DashboardFrame } from "@/components/dashboard-frame";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ClientEntryForm } from "@/components/clients/client-entry-form";
 import { requireRole } from "@/lib/authorization";
 import { listClients, listPartners } from "@/lib/services/clients";
 import { deleteClientAction, saveClientAction } from "@/app/actions";
@@ -24,36 +25,11 @@ export default async function ClientsPage() {
 
       <section className="mt-7 border-b border-neutral-200 pb-8">
         <h2 className="font-serif text-xl text-neutral-900">Novo cliente</h2>
-        <form action={saveClientAction} className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <label className="space-y-1 text-xs text-neutral-600">
-            Nome completo
-            <Input name="name" autoComplete="name" required minLength={2} maxLength={120} />
-          </label>
-          <label className="space-y-1 text-xs text-neutral-600">
-            CPF
-            <Input name="cpf" inputMode="numeric" placeholder="000.000.000-00" required />
-          </label>
-          <label className="space-y-1 text-xs text-neutral-600">
-            Telefone
-            <Input name="phone" type="tel" autoComplete="tel" />
-          </label>
-          <label className="space-y-1 text-xs text-neutral-600">
-            E-mail
-            <Input name="email" type="email" autoComplete="email" />
-          </label>
-          {user.role !== Role.PARCEIRO && (
-            <label className="space-y-1 text-xs text-neutral-600">
-              Parceiro responsável
-              <select name="partnerId" required className="h-11 w-full border border-neutral-300 bg-white px-3 text-sm text-neutral-900">
-                <option value="">Selecione</option>
-                {partners.map((partner) => <option key={partner.id} value={partner.id}>{partner.name}</option>)}
-              </select>
-            </label>
-          )}
-          <div className="flex items-end">
-            <Button type="submit" className="h-11 w-full sm:w-auto">Adicionar cliente</Button>
-          </div>
-        </form>
+        <ClientEntryForm
+          partners={partners}
+          isPartner={user.role === Role.PARCEIRO}
+          mockMode={!process.env.DOCUMENT_AI_URL?.trim()}
+        />
       </section>
 
       <section className="mt-7">

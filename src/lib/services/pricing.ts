@@ -1,4 +1,4 @@
-import { Role } from "@prisma/client";
+import { AuditAction, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import type { Actor } from "@/lib/services/clients";
 
@@ -6,6 +6,13 @@ export async function listPricingRules(activeOnly = false) {
   return prisma.pricingRule.findMany({
     where: activeOnly ? { isActive: true } : undefined,
     orderBy: { termMonths: "asc" },
+  });
+}
+
+export async function listProducts(activeOnly = false) {
+  return prisma.product.findMany({
+    where: activeOnly ? { isActive: true } : undefined,
+    orderBy: { name: "asc" },
   });
 }
 
@@ -26,19 +33,52 @@ export async function savePricingRule(actor: Actor, input: {
   });
 }
 
-export async function listPartnerCommissions() {
+export async function listPartnerCommissions(actor: Actor) {
+  if (actor.role !== Role.ADMIN) throw new Error("Somente ADMIN pode consultar comissões.");
   return prisma.user.findMany({
     where: { role: Role.PARCEIRO, isActive: true },
-    select: { id: true, name: true, commissionPercent: true },
+    select: {
+      id: true,
+      name: true,
+      productCommissions: { select: { productId: true, commissionPercent: true } },
+    },
     orderBy: { name: "asc" },
   });
 }
 
-export async function savePartnerCommission(actor: Actor, partnerId: string, commissionPercent: number) {
+export async function savePartnerCommission(
+  actor: Actor,
+  partnerId: string,
+  productId: string,
+  commissionPercent: number,
+) {
   if (actor.role !== Role.ADMIN) throw new Error("Somente ADMIN pode alterar comissões.");
-  const result = await prisma.user.updateMany({
-    where: { id: partnerId, role: Role.PARCEIRO },
-    data: { commissionPercent: commissionPercent.toFixed(2) },
+  await prisma.$transaction(async (transaction) => {
+    const partner = await transaction.user.findFirst({
+      where: { id: partnerId, role: Role.PARCEIRO },
+      select: { id: true },
+    });
+    const product = await transaction.product.findFirst({
+      where: { id: productId, isActive: true },
+      select: { id: true },
+    });
+    if (!partner) throw new Error("Parceiro não encontrado.");
+    if (!product) throw new Error("Produto não encontrado ou inativo.");
+
+    await transaction.partnerProductCommission.upsert({
+      where: { partnerId_productId: { partnerId, productId } },
+      update: { commissionPercent: commissionPercent.toFixed(2) },
+      create: { partnerId, productId, commissionPercent: commissionPercent.toFixed(2) },
+    });
+
+    await transaction.auditLog.create({
+      data: {
+        actorId: actor.id,
+        action: AuditAction.PARTNER_COMMISSION_UPDATED,
+        entity: "PARTNER_PRODUCT_COMMISSION",
+        entityId: partnerId,
+        metadata: { productId, commissionPercent },
+      },
+    });
   });
-  if (result.count !== 1) throw new Error("Parceiro não encontrado.");
 }

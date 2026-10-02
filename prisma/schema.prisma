@@ -22,13 +22,18 @@ enum ProposalStatus {
   PAGA
 }
 
+enum AuditAction {
+  CLIENT_CPF_VIEWED
+  PROPOSAL_STATUS_CHANGED
+  PARTNER_COMMISSION_UPDATED
+}
+
 model User {
   id           String   @id @default(uuid()) @db.Uuid
   name         String
   email        String   @unique
   passwordHash String
   role         Role     @default(OPERADOR)
-  commissionPercent Decimal @default(10.00) @db.Decimal(5, 2)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -36,9 +41,11 @@ model User {
   @@index([role])
   @@map("users")
 
-  clients          Client[]                @relation("PartnerClients")
-  proposals        Proposal[]              @relation("PartnerProposals")
-  statusChanges    ProposalStatusHistory[] @relation("StatusChangedBy")
+  clients       Client[]                @relation("PartnerClients")
+  proposals     Proposal[]              @relation("PartnerProposals")
+  statusChanges ProposalStatusHistory[] @relation("StatusChangedBy")
+  auditLogs     AuditLog[]
+  productCommissions PartnerProductCommission[]
 }
 
 model Client {
@@ -59,26 +66,54 @@ model Client {
 }
 
 model Proposal {
-  id                       String         @id @default(uuid()) @db.Uuid
-  clientId                 String         @db.Uuid
-  client                   Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  partnerId                String         @db.Uuid
-  partner                  User           @relation("PartnerProposals", fields: [partnerId], references: [id], onDelete: Restrict)
-  amount                   Decimal        @db.Decimal(12, 2)
-  termMonths               Int
-  monthlyRate              Decimal        @db.Decimal(7, 4)
-  status                   ProposalStatus @default(CONSULTA)
-  commissionAmount         Decimal?       @db.Decimal(12, 2)
+  id                        String         @id @default(uuid()) @db.Uuid
+  clientId                  String         @db.Uuid
+  client                    Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  productId                 String         @db.Uuid
+  product                   Product        @relation(fields: [productId], references: [id], onDelete: Restrict)
+  partnerId                 String         @db.Uuid
+  partner                   User           @relation("PartnerProposals", fields: [partnerId], references: [id], onDelete: Restrict)
+  amount                    Decimal        @db.Decimal(12, 2)
+  termMonths                Int
+  monthlyRate               Decimal        @db.Decimal(7, 4)
+  status                    ProposalStatus @default(CONSULTA)
+  commissionAmount          Decimal?       @db.Decimal(12, 2)
   commissionPercentSnapshot Decimal?       @db.Decimal(5, 2)
-  paidAt                   DateTime?
-  createdAt                DateTime       @default(now())
-  updatedAt                DateTime       @updatedAt
+  paidAt                    DateTime?
+  createdAt                 DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
 
   statusHistory ProposalStatusHistory[]
 
   @@index([status, createdAt])
   @@index([partnerId, status])
   @@map("proposals")
+}
+
+model Product {
+  id        String   @id @default(uuid()) @db.Uuid
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  proposals   Proposal[]
+  commissions PartnerProductCommission[]
+
+  @@map("products")
+}
+
+model PartnerProductCommission {
+  partnerId         String   @db.Uuid
+  productId         String   @db.Uuid
+  commissionPercent Decimal  @db.Decimal(5, 2)
+  updatedAt         DateTime @updatedAt
+  partner           User     @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  product           Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([partnerId, productId])
+  @@map("partner_product_commissions")
 }
 
 model ProposalStatusHistory {
@@ -103,4 +138,19 @@ model PricingRule {
   updatedAt   DateTime @updatedAt
 
   @@map("pricing_rules")
+}
+
+model AuditLog {
+  id        String      @id @default(uuid()) @db.Uuid
+  actorId   String      @db.Uuid
+  actor     User        @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  action    AuditAction
+  entity    String
+  entityId  String      @db.Uuid
+  metadata  Json?
+  createdAt DateTime    @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([entity, entityId, createdAt])
+  @@map("audit_logs")
 }

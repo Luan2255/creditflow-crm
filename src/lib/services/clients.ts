@@ -1,6 +1,7 @@
 import { Role } from "@prisma/client";
 import { canAccessPartnerData, formatCpf, normalizeCpf } from "@/lib/domain";
 import { prisma } from "@/lib/prisma";
+import { auditCpfAccess } from "@/lib/services/audit";
 import type { clientSchema } from "@/lib/validation";
 import type { z } from "zod";
 
@@ -16,6 +17,10 @@ export async function listClients(actor: Actor) {
     },
     orderBy: { updatedAt: "desc" },
   });
+
+  if (actor.role === Role.ADMIN) {
+    await auditCpfAccess(actor.id, clients.map((client) => client.id), "clients");
+  }
 
   return clients.map(({ cpf, ...client }) => ({
     ...client,
